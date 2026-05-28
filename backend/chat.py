@@ -3,28 +3,49 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 from typing import Generator
 from tools import TOOLS, execute_tool
+from memory import store_turn, retrieve_context
 
 load_dotenv()
 
-# Use Haiku for tool calls (cheaper), Sonnet for main chat
+# Haiku for tool calls (cost efficient), Sonnet for main chat
 CHAT_MODEL = "claude-sonnet-4-5"
 TOOL_MODEL = "claude-haiku-4-5-20251001"
 
 client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-SYSTEM_PROMPT = "You are a helpful AI assistant. Use tools when appropriate."
+
+def build_system_prompt(query: str, session_id: str) -> str:
+    """
+    Builds the system prompt, injecting relevant past context
+    from ChromaDB if any exists for this session.
+    """
+    base = "You are a helpful AI assistant. Use tools when appropriate."
+
+    context = retrieve_context(query, session_id)
+    if not context:
+        return base
+
+    return f"""{base}
+
+## Relevant past context from this conversation:
+{context}
+
+Use this context only if relevant. Do not mention it explicitly unless asked."""
 
 
-def get_chat_response(messages: list) -> str:
+def get_chat_response(messages: list, session_id: str = "default") -> str:
     """
-    Sends messages to Claude. If Claude decides to use a tool,
-    we execute it and feed the result back — this loops until
-    Claude gives a final text response.
+    Sends messages to Claude with memory-injected system prompt.
+    Handles the agentic tool use loop until Claude gives a final answer.
+    Stores the completed turn in ChromaDB.
     """
+    user_message = messages[-1]["content"]
+    system = build_system_prompt(user_message, session_id)
+
     response = client.messages.create(
         model=TOOL_MODEL,
         max_tokens=1024,
-        system=SYSTEM_PROMPT,
+        system=system,
         tools=TOOLS,
         messages=messages
     )
@@ -42,7 +63,6 @@ def get_chat_response(messages: list) -> str:
                     "content": result
                 })
 
-        # Send tool results back to Claude for its final answer
         messages = messages + [
             {"role": "assistant", "content": response.content},
             {"role": "user", "content": tool_results}
@@ -51,24 +71,28 @@ def get_chat_response(messages: list) -> str:
         response = client.messages.create(
             model=TOOL_MODEL,
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
+            system=system,
             tools=TOOLS,
             messages=messages
         )
 
-    return response.content[0].text
+    reply = response.content[0].text
+
+    # Store this turn in memory for future retrieval
+    store_turn(session_id, user_message, reply)
+
+    return reply
 
 
 def stream_chat_response(messages: list) -> Generator[str, None, None]:
     """
     Streams Claude's response token by token.
-    Note: streaming doesn't support tool use, so this is used
-    for regular conversation without tools.
+    Used for regular conversation without tool use.
     """
     with client.messages.stream(
         model=CHAT_MODEL,
         max_tokens=1024,
-        system=SYSTEM_PROMPT,
+        system="You are a helpful AI assistant.",
         messages=messages
     ) as stream:
         for text in stream.text_stream:

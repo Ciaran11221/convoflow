@@ -73,7 +73,7 @@ def chat(req: ChatRequest):
 
     # Call Claude with full conversation history
     try:
-        reply = get_chat_response(sessions[session_id])
+        reply = get_chat_response(sessions[session_id], session_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
