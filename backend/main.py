@@ -4,6 +4,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from models import ChatRequest, ChatResponse
 from chat import get_chat_response
+from fastapi import FastAPI, HTTPException, UploadFile, File
+import os
+import shutil
 import uuid
 
 
@@ -93,3 +96,18 @@ def get_history(session_id: str):
 def clear_session(session_id: str):
     sessions.pop(session_id, None)
     return {"cleared": session_id}
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """
+    Accepts a file upload from the frontend and saves it
+    to the uploads folder where the read_file tool can access it.
+    """
+    # Sanitise filename to prevent directory traversal attacks
+    filename = os.path.basename(file.filename)
+    save_path = os.path.join("uploads", filename)
+
+    with open(save_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    return {"uploaded": filename}
