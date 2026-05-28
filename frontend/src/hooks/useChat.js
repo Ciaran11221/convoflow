@@ -19,39 +19,57 @@ export function useChat() {
     setStreamingContent('')
 
     try {
-      // Open SSE connection to the streaming endpoint
-      const response = await fetch('/chat/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userInput, session_id: SESSION_ID })
-      })
+      const needsTool = userInput.toLowerCase().includes('read the file') ||
+                  userInput.toLowerCase().includes('read ') ||
+                  userInput.toLowerCase().includes('summarise') ||
+                  userInput.toLowerCase().includes('summarize') ||
+                  userInput.toLowerCase().includes('calculate') ||
+                  userInput.toLowerCase().includes('what is ')
 
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let fullContent = ''
+      if (needsTool) {
+        // Use regular /chat endpoint for tool use (calculator, file reading)
+        const response = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: userInput, session_id: SESSION_ID })
+        })
+        const data = await response.json()
+        setMessages(prev => [...prev, { role: 'assistant', content: data.response }])
+        setStreamingContent('')
 
-      // Read tokens as they stream in
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+      } else {
+        // Use streaming endpoint for normal conversation
+        const response = await fetch('/chat/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: userInput, session_id: SESSION_ID })
+        })
 
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let fullContent = ''
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const token = line.slice(6) // Strip the "data: " prefix
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
 
-            if (token === '[DONE]') {
-              // Stream finished — move content to messages list
-              setMessages(prev => [
-                ...prev,
-                { role: 'assistant', content: fullContent }
-              ])
-              setStreamingContent('')
-            } else {
-              fullContent += token
-              setStreamingContent(fullContent)
+          const chunk = decoder.decode(value)
+          const lines = chunk.split('\n')
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const token = line.slice(6)
+
+              if (token === '[DONE]') {
+                setMessages(prev => [
+                  ...prev,
+                  { role: 'assistant', content: fullContent }
+                ])
+                setStreamingContent('')
+              } else {
+                fullContent += token
+                setStreamingContent(fullContent)
+              }
             }
           }
         }
