@@ -1,0 +1,25 @@
+# Environment variables - NEVER commit these
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+build/
+
+# VS Code
+.vscode/
+
+# ChromaDB data (generated at runtime)
+chroma_db/
+
+# Uploads folder contents (but keep the folder)
+backend/uploads/*
+!backend/uploads/.gitkeep
