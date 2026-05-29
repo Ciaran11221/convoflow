@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
+const API_BASE = import.meta.env.VITE_API_URL || ''
+
 // Generate a session ID once per browser session
 const SESSION_ID = uuidv4()
 
@@ -28,7 +30,7 @@ export function useChat() {
 
       if (needsTool) {
         // Use regular /chat endpoint for tool use (calculator, file reading)
-        const response = await fetch('/chat', {
+        const response = await fetch(`${API_BASE}/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: userInput, session_id: SESSION_ID })
@@ -39,7 +41,7 @@ export function useChat() {
 
       } else {
         // Use streaming endpoint for normal conversation
-        const response = await fetch('/chat/stream', {
+        const response = await fetch(`${API_BASE}/chat/stream`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: userInput, session_id: SESSION_ID })
@@ -86,7 +88,7 @@ export function useChat() {
   }, [isStreaming])
 
   const clearChat = useCallback(async () => {
-    await fetch(`/clear/${SESSION_ID}`, { method: 'POST' })
+    await fetch(`${API_BASE}/clear/${SESSION_ID}`, { method: 'POST' })
     setMessages([])
     setStreamingContent('')
   }, [])
